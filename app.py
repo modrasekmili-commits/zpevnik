@@ -1,11 +1,18 @@
 import streamlit as st
 import requests
-import logic  # Použije tvůj stávající soubor logic.py
+import logic  # tvůj logic.py
 
-# Nastavení stránky
-st.set_page_config(page_title="Můj Zpěvník", layout="wide")
+# 1. Roztažení na celou obrazovku
+st.set_page_config(page_title="Zpěvník Online", layout="wide")
 
-# Načtení klíčů ze Secrets (to nastavíš v ovládacím panelu Streamlitu)
+# CSS pro hezčí zobrazení (volitelné)
+st.markdown("""
+    <style>
+    .main { background-color: #f5f5f5; }
+    .stCode { background-color: #ffffff !important; border: 1px solid #ddd; }
+    </style>
+    """, unsafe_allow_html=True)
+
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 
@@ -13,37 +20,37 @@ def nacti_data():
     headers = {
         "apikey": KEY, 
         "Authorization": f"Bearer {KEY}",
-        "Accept-Profile": "zpevnik"  # PŘIDEJTE TENTO ŘÁDEK
+        "Accept-Profile": "zpevnik"
     }
-    # Pokud jsou vaše tabulky v jiném schématu než 'public', Supabase to bez toho nenajde
-    r = requests.get(f"{URL}/rest/v1/pisne?select=*,interpreti(jmeno)", headers=headers)
-    
-    if r.status_code != 200:
-        st.error(f"Chyba Supabase: {r.text}") # Tohle nám ukáže skutečný problém
-        return []
-        
+    r = requests.get(f"{URL}/rest/v1/pisne?select=*,interpreti(jmeno)&order=nazev", headers=headers)
     return r.json()
 
-st.title("🎸 Online Zpěvník")
+st.title("🎸 Můj Online Zpěvník")
 
 try:
     data = nacti_data()
-    # Vytvoření seznamu pro výběr
-    seznam_pisni = [f"{p['interpreti']['jmeno']} - {p['nazev']}" for p in data]
-    vyber = st.selectbox("Vyber píseň:", seznam_pisni)
-
+    
+    # Horní panel s ovládáním
+    col1, col2, col3 = st.columns([2, 1, 1])
+    
+    with col1:
+        seznam = [f"{p['interpreti']['jmeno']} - {p['nazev']}" for p in data]
+        vyber = st.selectbox("Vyber píseň:", seznam)
+    
+    with col2:
+        posun = st.number_input("Transpozice", value=0, step=1)
+        
     if vyber:
-        pisen = data[seznam_pisni.index(vyber)]
+        pisen = data[seznam.index(vyber)]
         
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            posun = st.number_input("Transpozice", value=0, step=1)
+        # Zobrazení názvu velkým písmem
+        st.subheader(f"{pisen['nazev']} ({pisen['interpreti']['jmeno']})")
         
-        # Použití tvé původní logiky z logic.py!
-        transponovany_text = logic.transponuj_text(pisen['text_akordy'], posun)
+        # Logika transpozice
+        text_k_zobrazeni = logic.transponuj_text(pisen['text_akordy'], posun)
         
-        # Zobrazení textu (st.code zachová formátování akordů)
-        st.code(transponovany_text, language="text")
+        # Zobrazení - language="text" vypne barevné zvýrazňování kódu
+        st.code(text_k_zobrazeni, language="text")
 
 except Exception as e:
-    st.error(f"Chyba při načítání: {e}")
+    st.error(f"Něco se nepovedlo: {e}")
