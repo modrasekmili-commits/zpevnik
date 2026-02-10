@@ -1,5 +1,5 @@
 import re
-from config import chromaticka_rada
+chromaticka_rada = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'H']
 
 def transponuj_text(text, posun):
     if posun == 0: return text
