@@ -3,47 +3,62 @@ import requests
 import logic
 import streamlit.components.v1 as components
 
-# 1. Konfigurace stránky
+# 1. Konfigurace stránky - musí být jako první
 st.set_page_config(page_title="Zpěvník Online", layout="wide")
 
-# 2. CSS pro vzhled a fixní výšku textu (aby bylo kam rolovat)
+# 2. CSS pro vzhled a FIXNÍ ŠÍŘKU PÍSMA (aby akordy seděly)
 st.markdown("""
     <style>
+    /* Hlavní kontejner pro píseň */
     .song-container {
         background-color: #1e1e1e;
         color: #ffffff;
-        padding: 20px;
+        padding: 30px;
         border-radius: 10px;
-        font-family: 'Consolas', 'Monaco', monospace;
-        height: 70vh;
+        /* Zásadní pro zarovnání akordů: */
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+        height: 75vh;
         overflow-y: auto;
-        white-space: pre;
+        overflow-x: auto;
+        white-space: pre !important; /* Zachová mezery a konce řádků */
         font-size: 18px;
-        line-height: 1.4;
-        border: 1px solid #444;
+        line-height: 1.2; /* Menší řádkování pro lepší spojení akordů s textem */
+        border: 2px solid #444;
+        tab-size: 4;
     }
-    /* Skrytí scrollbaru pro čistší vzhled */
-    .song-container::-webkit-scrollbar { width: 8px; }
-    .song-container::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+    
+    /* Úprava bočního panelu */
+    .stSidebar {
+        background-color: #f8f9fa;
+    }
+    
+    /* Styl pro nadpis písně */
+    .song-title {
+        color: #ff4b4b;
+        margin-bottom: 0px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. Načtení klíčů a dat
+# 3. Načtení dat ze Supabase
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 
 @st.cache_data(ttl=600)
 def nacti_data():
-    headers = {"apikey": KEY, "Authorization": f"Bearer {KEY}", "Accept-Profile": "zpevnik"}
-    # Načítáme vše potřebné včetně rychlosti
+    headers = {
+        "apikey": KEY, 
+        "Authorization": f"Bearer {KEY}", 
+        "Accept-Profile": "zpevnik"
+    }
+    # Načítáme ID, název, text, rychlost a jméno interpreta
     r = requests.get(f"{URL}/rest/v1/pisne?select=id,nazev,text_akordy,rychlost,interpreti(jmeno)&order=nazev", headers=headers)
+    if r.status_code != 200:
+        st.error(f"Chyba databáze: {r.text}")
+        return []
     return r.json()
 
-try:
-    data = nacti_data()
-except Exception as e:
-    st.error(f"Chyba při připojení k Supabase: {e}")
-    data = []
+data = nacti_data()
 
 # --- SIDEBAR (Ovládání) ---
 with st.sidebar:
@@ -64,18 +79,14 @@ with st.sidebar:
         posun = st.number_input("Transpozice:", value=0, step=1)
         
         st.subheader("⏱️ Autoscroll")
-
-# Ošetření rychlosti z databáze (pokud je tam 2000, převedeme to na rozumných 30)
-raw_rychlost = pisen.get('rychlost')
-try:
-    db_rychlost = int(raw_rychlost)
-    if db_rychlost > 200: # Pokud je to číslo z PC aplikace (např. 2000)
-        db_rychlost = 30  # Nastavíme rozumný střed pro web
-except:
-    db_rychlost = 30
-
-# Slider nyní bude mít rozsah 1 až 100
-rychlost = st.slider("Rychlost (1=blesk, 100=hlemýžď)", 1, 100, db_rychlost)
+        # Ošetření rychlosti (převod z ms na webový slider 1-100)
+        try:
+            val = int(pisen.get('rychlost', 30))
+            db_rychlost = 30 if val > 200 else val
+        except:
+            db_rychlost = 30
+            
+        rychlost_scroll = st.slider("Rychlost (1=max, 100=min)", 1, 100, db_rychlost)
         
         if 'scroll_active' not in st.session_state:
             st.session_state.scroll_active = False
@@ -83,39 +94,43 @@ rychlost = st.slider("Rychlost (1=blesk, 100=hlemýžď)", 1, 100, db_rychlost)
         def toggle_scroll():
             st.session_state.scroll_active = not st.session_state.scroll_active
 
-        st.button("START / STOP", on_click=toggle_scroll, use_container_width=True, 
+        st.button("🚀 START / STOP", on_click=toggle_scroll, use_container_width=True, 
                   type="primary" if st.session_state.scroll_active else "secondary")
     else:
         st.warning("Píseň nenalezena")
 
 # --- HLAVNÍ PLOCHA ---
 if 'pisen' in locals():
-    st.title(f"{pisen['nazev']}")
-    st.caption(f"Interpret: {pisen['interpreti']['jmeno']} | ID: {pisen['id']}")
+    # Hlavička písně
+    st.markdown(f"<h1 class='song-title'>{pisen['nazev']}</h1>", unsafe_allow_html=True)
+    st.markdown(f"**{pisen['interpreti']['jmeno']}** (ID: {pisen['id']})")
 
-    # Transpozice pomocí tvého logic.py
-    finalni_text = logic.transponuj_text(pisen['text_akordy'], posun)
+    # Transpozice pomocí logic.py
+    # DŮLEŽITÉ: Používáme .replace('\r\n', '\n'), aby nedocházelo k dvojitým řádkům
+    čisty_text = pisen['text_akordy'].replace('\r\n', '\n')
+    finalni_text = logic.transponuj_text(čisty_text, posun)
 
-    # Zobrazení textu v kontejneru s ID pro JavaScript
+    # Zobrazení v kontejneru
+    # HTML wrap zajistí, že se text nebude hroutit
     st.markdown(f'<div id="song-box" class="song-container">{finalni_text}</div>', unsafe_allow_html=True)
 
-    # --- JAVASCRIPT PRO POSOUVÁNÍ KONKRÉTNÍHO DIVU ---
+    # --- JAVASCRIPT PRO SCROLL ---
     if st.session_state.scroll_active:
         js_scroll = f"""
         <script>
-            // Najdeme prvek v nadřazeném okně (Streamlit)
-            const scrollBox = window.parent.document.getElementById('song-box');
+            var scrollBox = window.parent.document.getElementById('song-box');
             if (scrollBox) {{
                 if (window.scrollInterval) {{ clearInterval(window.scrollInterval); }}
                 window.scrollInterval = setInterval(function() {{
                     scrollBox.scrollTop += 1;
-                }}, {rychlost});
+                }}, {rychlost_scroll});
             }}
         </script>
         """
         components.html(js_scroll, height=0)
     else:
+        # Zastavení scrollu
         components.html("<script>if (window.scrollInterval) { clearInterval(window.scrollInterval); }</script>", height=0)
 
 else:
-    st.info("Vyber píseň v levém panelu.")
+    st.info("Vyber píseň v levém panelu pro zobrazení.")
