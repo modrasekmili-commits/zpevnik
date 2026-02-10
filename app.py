@@ -10,9 +10,18 @@ URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 
 def nacti_data():
-    headers = {"apikey": KEY, "Authorization": f"Bearer {KEY}"}
-    # Načte písně i s jmény interpretů najednou
+    headers = {
+        "apikey": KEY, 
+        "Authorization": f"Bearer {KEY}",
+        "Accept-Profile": "zpevnik"  # PŘIDEJTE TENTO ŘÁDEK
+    }
+    # Pokud jsou vaše tabulky v jiném schématu než 'public', Supabase to bez toho nenajde
     r = requests.get(f"{URL}/rest/v1/pisne?select=*,interpreti(jmeno)", headers=headers)
+    
+    if r.status_code != 200:
+        st.error(f"Chyba Supabase: {r.text}") # Tohle nám ukáže skutečný problém
+        return []
+        
     return r.json()
 
 st.title("🎸 Online Zpěvník")
