@@ -2,55 +2,64 @@ import streamlit as st
 import requests
 import logic  # tvůj logic.py
 
-# 1. Roztažení na celou obrazovku
 st.set_page_config(page_title="Zpěvník Online", layout="wide")
-
-# CSS pro hezčí zobrazení (volitelné)
-st.markdown("""
-    <style>
-    .main { background-color: #f5f5f5; }
-    .stCode { background-color: #ffffff !important; border: 1px solid #ddd; }
-    </style>
-    """, unsafe_allow_html=True)
 
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 
+@st.cache_data(ttl=600) # Data si pamatuje 10 minut, pak je načte znovu
 def nacti_data():
     headers = {
         "apikey": KEY, 
         "Authorization": f"Bearer {KEY}",
         "Accept-Profile": "zpevnik"
     }
-    r = requests.get(f"{URL}/rest/v1/pisne?select=*,interpreti(jmeno)&order=nazev", headers=headers)
+    # Načteme ID, název, text a jméno interpreta
+    r = requests.get(f"{URL}/rest/v1/pisne?select=id,nazev,text_akordy,interpreti(jmeno)&order=nazev", headers=headers)
     return r.json()
 
-st.title("🎸 Můj Online Zpěvník")
+st.title("🎸 Online Zpěvník")
 
 try:
     data = nacti_data()
     
-    # Horní panel s ovládáním
-    col1, col2, col3 = st.columns([2, 1, 1])
-    
-    with col1:
-        seznam = [f"{p['interpreti']['jmeno']} - {p['nazev']}" for p in data]
-        vyber = st.selectbox("Vyber píseň:", seznam)
-    
-    with col2:
-        posun = st.number_input("Transpozice", value=0, step=1)
+    # --- VYHLEDÁVÁNÍ ---
+    search_query = st.text_input("🔍 Hledej (název, interpret nebo číslo písně):", "").lower()
+
+    # Filtrování dat na základě hledání
+    filtrovana_data = []
+    for p in data:
+        id_str = str(p['id'])
+        nazev = p['nazev'].lower()
+        interpret = p['interpreti']['jmeno'].lower()
         
-    if vyber:
-        pisen = data[seznam.index(vyber)]
+        if search_query in nazev or search_query in interpret or search_query == id_str:
+            filtrovana_data.append(p)
+
+    # --- VÝBĚR PÍSNĚ ---
+    if filtrovana_data:
+        seznam_pro_selectbox = [f"{p['id']}. {p['interpreti']['jmeno']} - {p['nazev']}" for p in filtrovana_data]
+        vyber_label = st.selectbox(f"Nalezeno písní: {len(filtrovana_data)}", seznam_pro_selectbox)
         
-        # Zobrazení názvu velkým písmem
-        st.subheader(f"{pisen['nazev']} ({pisen['interpreti']['jmeno']})")
+        index_vybrane = seznam_pro_selectbox.index(vyber_label)
+        pisen = filtrovana_data[index_vybrane]
+
+        # --- OVLÁDÁNÍ ---
+        st.divider()
+        c1, c2 = st.columns([1, 4])
+        with c1:
+            posun = st.number_input("Transpozice:", value=0, step=1)
+            st.write(f"**ID písně:** {pisen['id']}")
         
-        # Logika transpozice
-        text_k_zobrazeni = logic.transponuj_text(pisen['text_akordy'], posun)
+        with c2:
+            st.subheader(f"{pisen['nazev']} — {pisen['interpreti']['jmeno']}")
+            
+        # Transpozice a zobrazení
+        finalni_text = logic.transponuj_text(pisen['text_akordy'], posun)
+        st.code(finalni_text, language="text")
         
-        # Zobrazení - language="text" vypne barevné zvýrazňování kódu
-        st.code(text_k_zobrazeni, language="text")
+    else:
+        st.warning("Žádná píseň neodpovídá vyhledávání.")
 
 except Exception as e:
-    st.error(f"Něco se nepovedlo: {e}")
+    st.error(f"Chyba: {e}")
