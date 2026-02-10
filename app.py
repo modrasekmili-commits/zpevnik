@@ -64,9 +64,18 @@ with st.sidebar:
         posun = st.number_input("Transpozice:", value=0, step=1)
         
         st.subheader("⏱️ Autoscroll")
-        # Výchozí rychlost z DB nebo 30
-        db_rychlost = int(pisen.get('rychlost', 30)) if pisen.get('rychlost') else 30
-        rychlost = st.slider("Rychlost (nižší = rychlejší)", 1, 100, db_rychlost)
+
+# Ošetření rychlosti z databáze (pokud je tam 2000, převedeme to na rozumných 30)
+raw_rychlost = pisen.get('rychlost')
+try:
+    db_rychlost = int(raw_rychlost)
+    if db_rychlost > 200: # Pokud je to číslo z PC aplikace (např. 2000)
+        db_rychlost = 30  # Nastavíme rozumný střed pro web
+except:
+    db_rychlost = 30
+
+# Slider nyní bude mít rozsah 1 až 100
+rychlost = st.slider("Rychlost (1=blesk, 100=hlemýžď)", 1, 100, db_rychlost)
         
         if 'scroll_active' not in st.session_state:
             st.session_state.scroll_active = False
