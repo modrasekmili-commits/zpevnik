@@ -4,28 +4,38 @@ import logic
 import streamlit.components.v1 as components
 
 # 1. Konfigurace stránky
-st.set_page_config(page_title="Online Zpěvník", layout="wide")
+st.set_page_config(page_title="Zpěvník Online", layout="wide")
 
-# 2. CSS: Skrytí clipboardu a základní styly
+# 2. CSS s agresivním vynucením vzhledu
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
 
+    /* Skrytí otravného tlačítka kopírování */
     button[title="Copy to clipboard"] { display: none !important; }
 
+    /* Hlavní box pro píseň */
     .song-container {
         background-color: #1a1a1a !important;
-        padding: 30px;
-        border-radius: 8px;
-        height: 78vh;
+        padding: 30px !important;
+        border-radius: 10px;
+        height: 80vh;
         overflow-y: auto;
         overflow-x: auto;
         white-space: pre !important; 
         word-wrap: normal !important;
-        line-height: 1.35; 
-        border: 1px solid #333;
+        line-height: 1.4 !important; 
+        border: 2px solid #444;
     }
 
+    /* TOTÁLNÍ VYNUCENÍ BARVY A VELIKOSTI (Přebije Streamlit barvy) */
+    #song-box, #song-box * {
+        color: #ffffff !important;         /* Čistě bílá pro čitelnost */
+        font-size: 28px !important;        /* Zvětšeno na 28px */
+        font-family: 'Roboto Mono', monospace !important;
+        background-color: transparent !important;
+    }
+    
     .stApp { background-color: #0e1117; }
     </style>
     """, unsafe_allow_html=True)
@@ -44,7 +54,7 @@ def nacti_data():
 
 data = nacti_data()
 
-# --- SIDEBAR ---
+# --- SIDEBAR (Ovládání) ---
 with st.sidebar:
     st.title("🎸 Ovládání")
     search = st.text_input("🔍 Hledat:").lower()
@@ -59,6 +69,7 @@ with st.sidebar:
         st.divider()
         trans = st.number_input("Transpozice:", value=0, step=1)
         
+        # Ošetření rychlosti
         db_val = pisen.get('rychlost', 30)
         try: start_spd = 30 if int(db_val) > 200 else int(db_val)
         except: start_spd = 30
@@ -72,34 +83,34 @@ with st.sidebar:
 
 # --- HLAVNÍ PLOCHA ---
 if 'pisen' in locals():
-    st.title(pisen['nazev'])
+    # Zobrazení názvu
+    st.markdown(f"<h1 style='color: white;'>{pisen['nazev']}</h1>", unsafe_allow_html=True)
     
     # Čištění textu
     clean_text = pisen['text_akordy'].replace('\r\n', '\n').replace('\r', '\n')
     clean_text = clean_text.replace('\xa0', ' ')
     clean_text = clean_text.expandtabs(4)
     
-    # Transpozice
+    # Transpozice pomocí tvého logic.py
     final_text = logic.transponuj_text(clean_text, trans)
 
-    # VYNUCENÍ VELIKOSTI A BARVY PŘÍMO V HTML (Inline style)
-    # Tady měníme velikost písma na 24px a barvu na světle šedou
-    html_song = f"""
-    <div id="song-box" class="song-container" 
-         style="color: #e0e0e0 !important; 
-                font-family: 'Roboto Mono', monospace !important; 
-                font-size: 24px !important;">{final_text}</div>
-    """
-    st.markdown(html_song, unsafe_allow_html=True)
+    # VLOŽENÍ TEXTU S EXTRÉMNÍ PRIORITOU STYLU
+    # Font-size je i tady přímo v HTML, aby to nešlo ignorovat
+    st.markdown(f'''
+        <div id="song-box" class="song-container" 
+             style="font-size: 28px !important; color: white !important;">{final_text}</div>
+    ''', unsafe_allow_html=True)
 
-    # JavaScript pro scroll
+    # JavaScript pro plynulý scroll
     if st.session_state.scrolling:
         components.html(f"""
             <script>
             var b = window.parent.document.getElementById('song-box');
             if (b) {{
                 if (window.parent.scrollInterval) {{ clearInterval(window.parent.scrollInterval); }}
-                window.parent.scrollInterval = setInterval(function() {{ b.scrollTop += 1; }}, {spd});
+                window.parent.scrollInterval = setInterval(function() {{ 
+                    b.scrollTop += 1; 
+                }}, {spd});
             }}
             </script>""", height=0)
     else:
