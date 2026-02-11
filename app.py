@@ -6,26 +6,21 @@ import streamlit.components.v1 as components
 # 1. Konfigurace stránky
 st.set_page_config(page_title="Zpěvník", layout="wide")
 
-# 2. CSS pro vzhled, barvy a šířku
+# 2. CSS pro PC a mobilní vzhled
 st.markdown("""
     <style>
-    /* Omezení šířky na PC a vycentrování */
     .main .block-container {
         max-width: 800px;
         padding-top: 2rem;
     }
-    
-    /* Skrytí Streamlit prvků */
     #MainMenu, footer, header {visibility: hidden;}
     
-    /* Větší a bílý popis vyhledávání */
     div[data-testid="stTextInput"] label {
         font-size: 2rem !important;
         color: #ffffff !important;
         font-weight: bold !important;
     }
 
-    /* Styl tlačítek v seznamu */
     .stButton button {
         text-align: left;
         padding: 12px;
@@ -62,10 +57,8 @@ def nacti_data():
     headers = {"apikey": KEY, "Authorization": f"Bearer {KEY}", "Accept-Profile": "zpevnik"}
     try:
         r = requests.get(f"{URL}/rest/v1/pisne?select=id,nazev,text_akordy,interpreti(jmeno)&order=nazev", headers=headers)
-        if r.status_code == 200:
-            return r.json()
-    except:
-        pass
+        if r.status_code == 200: return r.json()
+    except: pass
     return []
 
 data = nacti_data()
@@ -76,7 +69,6 @@ if 'selected_song_id' not in st.session_state:
 # --- LOGIKA ---
 
 if st.session_state.selected_song_id:
-    # --- DETAIL PÍSNĚ ---
     pisen = next((p for p in data if p['id'] == st.session_state.selected_song_id), None)
     
     if pisen:
@@ -89,68 +81,80 @@ if st.session_state.selected_song_id:
         
         trans = st.number_input("Transpozice:", value=0, step=1, key="trans")
 
-        raw_text = pisen['text_akordy']
-        clean_text = raw_text.replace('\r\n', '\n').replace('\r', '\n').replace('\xa0', ' ').expandtabs(4)
+        clean_text = pisen['text_akordy'].replace('\r\n', '\n').replace('\r', '\n').replace('\xa0', ' ').expandtabs(4)
         finalni_text = logic.transponuj_text(clean_text, trans)
 
-        # Izolované zobrazení textu
-       # Izolované zobrazení textu s responzivním písmem
+        # HTML s JAVASCRIPTEM PRO ZOOMOVÁNÍ GESTY
         html_content = f"""
-        <div style="
+        <div id="zoom-container" style="
             background-color: #1a1a1a; 
             color: #ffffff; 
-            padding: 15px; 
+            padding: 25px; 
             font-family: 'Roboto Mono', monospace; 
-            
-            /* TADY JE TA ZMĚNA: Písmo se přizpůsobí šířce (cca 50 znaků na řádek) */
-            font-size: 2.1vw; 
-            
+            font-size: 22px; 
             white-space: pre; 
-            line-height: 1.35;
+            line-height: 1.4;
             border-radius: 12px;
             border: 1px solid #444;
-            overflow-x: hidden; /* Zabrání vodorovnému posouvání */
+            touch-action: none; /* Důležité: vypne standardní zoom prohlížeče */
+            user-select: none;
         ">{finalni_text}</div>
-        
-        <style>
-            /* Na mobilech (úzká obrazovka) písmo zvětšíme, aby bylo čitelné, 
-               ale stále se vešlo na šířku */
-            @media (max-width: 800px) {{
-                div {{
-                    font-size: 4.2vw !important; 
+
+        <script>
+            const el = document.getElementById('zoom-container');
+            let fontSize = 22;
+            let initialDist = -1;
+
+            el.addEventListener('touchstart', (e) => {{
+                if (e.touches.length === 2) {{
+                    initialDist = Math.hypot(
+                        e.touches[0].pageX - e.touches[1].pageX,
+                        e.touches[0].pageY - e.touches[1].pageY
+                    );
                 }}
-            }}
-        </style>
+            }}, {{passive: false}});
+
+            el.addEventListener('touchmove', (e) => {{
+                if (e.touches.length === 2 && initialDist > 0) {{
+                    e.preventDefault();
+                    const currentDist = Math.hypot(
+                        e.touches[0].pageX - e.touches[1].pageX,
+                        e.touches[0].pageY - e.touches[1].pageY
+                    );
+                    
+                    const diff = currentDist - initialDist;
+                    if (Math.abs(diff) > 10) {{
+                        fontSize += diff > 0 ? 0.5 : -0.5;
+                        fontSize = Math.min(Math.max(10, fontSize), 80); // Limity písma
+                        el.style.fontSize = fontSize + 'px';
+                        initialDist = currentDist;
+                    }}
+                }}
+            }}, {{passive: false}});
+
+            el.addEventListener('touchend', () => {{
+                initialDist = -1;
+            }});
+        </script>
         <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
         """
         
-        # Přesnější výpočet výšky pro Iframe na mobilu
-        # Na mobilu jsou řádky vyšší kvůli většímu písmu
-        riadok_vyska = 38 if len(finalni_text) > 0 else 34
-        vyska = (len(finalni_text.split('\n')) * riadok_vyska) + 150
-        
+        # Pevná výška, aby se dalo scrollovat celou stránkou
+        vyska = (len(finalni_text.split('\n')) * 50) + 200
         components.html(html_content, height=vyska, scrolling=False)
     else:
         st.session_state.selected_song_id = None
         st.rerun()
 
 else:
-    # --- SEZNAM PÍSNÍ ---
     st.markdown("<h1 style='color: white; margin-bottom: 0;'>🎸 Zpěvník</h1>", unsafe_allow_html=True)
-    
     search = st.text_input("🔍 Hledat (ID, název, interpret):", "").lower()
     
-    # Filtrace dat
-    filtered = [p for p in data if (search in str(p['id']) or 
-                                    search in p['nazev'].lower() or 
-                                    search in p['interpreti']['jmeno'].lower())]
+    filtered = [p for p in data if (search in str(p['id']) or search in p['nazev'].lower() or search in p['interpreti']['jmeno'].lower())]
     
     if filtered:
         st.write("") 
         for p in filtered:
-            btn_label = f"{p['nazev']} — {p['interpreti']['jmeno']}"
-            if st.button(btn_label, key=f"p-{p['id']}", use_container_width=True):
+            if st.button(f"{p['nazev']} — {p['interpreti']['jmeno']}", key=f"p-{p['id']}", use_container_width=True):
                 st.session_state.selected_song_id = p['id']
                 st.rerun()
-    else:
-        st.warning("Nic nenalezeno.")
