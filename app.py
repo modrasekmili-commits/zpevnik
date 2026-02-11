@@ -6,6 +6,16 @@ import streamlit.components.v1 as components
 # 1. Konfigurace stránky
 st.set_page_config(page_title="Zpěvník", layout="wide")
 
+components.html("""
+<script>
+    var url = new URL(window.parent.location.href);
+    if (url.searchParams.has('fbclid')) {
+        url.searchParams.delete('fbclid');
+        window.parent.history.replaceState({}, '', url.pathname);
+    }
+</script>
+""", height=0)
+
 # 2. CSS pro PC vzhled a obří titulky
 st.markdown("""
     <style>
