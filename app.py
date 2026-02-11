@@ -6,27 +6,38 @@ import streamlit.components.v1 as components
 # 1. Konfigurace stránky
 st.set_page_config(page_title="Zpěvník", layout="wide")
 
-# 2. CSS pro PC a mobil
+# 2. CSS pro vzhled, barvy a šířku
 st.markdown("""
     <style>
-    /* Omezení šířky na PC pro lepší vzhled */
+    /* Omezení šířky na PC (cca polovina obrazovky) a vycentrování */
     .main .block-container {
-        max-width: 1200px;
+        max-width: 800px;
         padding-top: 2rem;
     }
     
     /* Skrytí Streamlit prvků */
     #MainMenu, footer, header {visibility: hidden;}
     
+    /* Větší a bílý popis vyhledávání */
+    div[data-testid="stTextInput"] label {
+        font-size: 2rem !important;
+        color: #ffffff !important;
+        font-weight: bold !important;
+    }
+
+    /* Styl tlačítek v seznamu */
     .stButton button {
         text-align: left;
-        padding: 10px;
-        font-size: 1.1rem;
+        padding: 12px;
+        font-size: 1.2rem;
+        background-color: #262730;
+        border: 1px solid #444;
+        color: white;
     }
 
     .huge-title {
         color: #ffffff !important;
-        font-size: clamp(2rem, 5vw, 4rem);
+        font-size: clamp(2.5rem, 6vw, 4.5rem);
         font-weight: 800;
         line-height: 1.1;
         margin-bottom: 5px;
@@ -34,8 +45,8 @@ st.markdown("""
     
     .meta-info {
         color: #aaaaaa;
-        font-size: 1.2rem;
-        margin-bottom: 20px;
+        font-size: 1.5rem;
+        margin-bottom: 25px;
     }
 
     .stApp { background-color: #0e1117; }
@@ -62,6 +73,7 @@ if 'selected_song_id' not in st.session_state:
 # --- LOGIKA ---
 
 if st.session_state.selected_song_id:
+    # --- DETAIL PÍSNĚ ---
     pisen = next((p for p in data if p['id'] == st.session_state.selected_song_id), None)
     
     if pisen:
@@ -74,48 +86,37 @@ if st.session_state.selected_song_id:
         
         trans = st.number_input("Transpozice:", value=0, step=1, key="trans")
 
-        # Příprava textu
         raw_text = pisen['text_akordy']
         clean_text = raw_text.replace('\r\n', '\n').replace('\r', '\n').replace('\xa0', ' ').expandtabs(4)
         finalni_text = logic.transponuj_text(clean_text, trans)
 
-        # Totální izolace textu přes Iframe (řeší bílé řádky 100%)
+        # Izolované zobrazení textu bez bílých pruhů
         html_content = f"""
         <div style="
             background-color: #1a1a1a; 
             color: #ffffff; 
-            padding: 20px; 
+            padding: 25px; 
             font-family: 'Roboto Mono', monospace; 
-            font-size: 22px; 
+            font-size: 24px; 
             white-space: pre; 
-            line-height: 1.35;
-            border-radius: 10px;
+            line-height: 1.4;
+            border-radius: 12px;
             border: 1px solid #444;
         ">{finalni_text}</div>
         <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
         """
-        # Automatický výpočet výšky podle počtu řádků
-        vyska = len(finalni_text.split('\n')) * 32 
-        components.html(html_content, height=max(vyska, 500), scrolling=False)
+        # Výpočet výšky
+        vyska = (len(finalni_text.split('\n')) * 34) + 100
+        components.html(html_content, height=vyska, scrolling=False)
     else:
         st.session_state.selected_song_id = None
         st.rerun()
 
 else:
-    st.title("🎸 Zpěvník")
+    # --- SEZNAM PÍSNÍ ---
+    st.markdown("<h1 style='color: white; margin-bottom: 0;'>🎸 Zpěvník</h1>", unsafe_allow_html=True)
     
-    # Omezení šířky vyhledávání na PC
-    col1, _ = st.columns([2, 1])
-    with col1:
-        search = st.text_input("🔍 Hledat (ID, název, interpret):", "").lower()
+    # Vyhledávání (popis je upraven přes CSS nahoře)
+    search = st.text_input("🔍 Hledat (ID, název, interpret):", "").lower()
     
-    filtered = [p for p in data if search in str(p['id']) or search in p['nazev'].lower() or search in p['interpreti']['jmeno'].lower()]
-    
-    if filtered:
-        # Seznam tlačítek v omezené šířce
-        col_list, _ = st.columns([2, 1])
-        with col_list:
-            for p in filtered:
-                if st.button(f"{p['nazev']} — {p['interpreti']['jmeno']}", key=f"p-{p['id']}", use_container_width=True):
-                    st.session_state.selected_song_id = p['id']
-                    st.rerun()
+    filtered = [p for p in data if search in str(p['id']) or search in p['naz
