@@ -94,22 +94,41 @@ if st.session_state.selected_song_id:
         finalni_text = logic.transponuj_text(clean_text, trans)
 
         # Izolované zobrazení textu
+       # Izolované zobrazení textu s responzivním písmem
         html_content = f"""
         <div style="
             background-color: #1a1a1a; 
             color: #ffffff; 
-            padding: 25px; 
+            padding: 15px; 
             font-family: 'Roboto Mono', monospace; 
-            font-size: 24px; 
+            
+            /* TADY JE TA ZMĚNA: Písmo se přizpůsobí šířce (cca 50 znaků na řádek) */
+            font-size: 2.1vw; 
+            
             white-space: pre; 
-            line-height: 1.4;
+            line-height: 1.35;
             border-radius: 12px;
             border: 1px solid #444;
+            overflow-x: hidden; /* Zabrání vodorovnému posouvání */
         ">{finalni_text}</div>
+        
+        <style>
+            /* Na mobilech (úzká obrazovka) písmo zvětšíme, aby bylo čitelné, 
+               ale stále se vešlo na šířku */
+            @media (max-width: 800px) {{
+                div {{
+                    font-size: 4.2vw !important; 
+                }}
+            }}
+        </style>
         <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
         """
-        # Výpočet výšky (34px na řádek + rezerva)
-        vyska = (len(finalni_text.split('\n')) * 34) + 100
+        
+        # Přesnější výpočet výšky pro Iframe na mobilu
+        # Na mobilu jsou řádky vyšší kvůli většímu písmu
+        riadok_vyska = 38 if len(finalni_text) > 0 else 34
+        vyska = (len(finalni_text.split('\n')) * riadok_vyska) + 150
+        
         components.html(html_content, height=vyska, scrolling=False)
     else:
         st.session_state.selected_song_id = None
