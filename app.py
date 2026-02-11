@@ -9,7 +9,7 @@ st.set_page_config(page_title="Zpěvník", layout="wide")
 # 2. CSS pro vzhled, barvy a šířku
 st.markdown("""
     <style>
-    /* Omezení šířky na PC (cca polovina obrazovky) a vycentrování */
+    /* Omezení šířky na PC a vycentrování */
     .main .block-container {
         max-width: 800px;
         padding-top: 2rem;
@@ -62,8 +62,11 @@ def nacti_data():
     headers = {"apikey": KEY, "Authorization": f"Bearer {KEY}", "Accept-Profile": "zpevnik"}
     try:
         r = requests.get(f"{URL}/rest/v1/pisne?select=id,nazev,text_akordy,interpreti(jmeno)&order=nazev", headers=headers)
-        return r.json()
-    except: return []
+        if r.status_code == 200:
+            return r.json()
+    except:
+        pass
+    return []
 
 data = nacti_data()
 
@@ -90,7 +93,7 @@ if st.session_state.selected_song_id:
         clean_text = raw_text.replace('\r\n', '\n').replace('\r', '\n').replace('\xa0', ' ').expandtabs(4)
         finalni_text = logic.transponuj_text(clean_text, trans)
 
-        # Izolované zobrazení textu bez bílých pruhů
+        # Izolované zobrazení textu
         html_content = f"""
         <div style="
             background-color: #1a1a1a; 
@@ -105,7 +108,7 @@ if st.session_state.selected_song_id:
         ">{finalni_text}</div>
         <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono&display=swap" rel="stylesheet">
         """
-        # Výpočet výšky
+        # Výpočet výšky (34px na řádek + rezerva)
         vyska = (len(finalni_text.split('\n')) * 34) + 100
         components.html(html_content, height=vyska, scrolling=False)
     else:
@@ -116,7 +119,19 @@ else:
     # --- SEZNAM PÍSNÍ ---
     st.markdown("<h1 style='color: white; margin-bottom: 0;'>🎸 Zpěvník</h1>", unsafe_allow_html=True)
     
-    # Vyhledávání (popis je upraven přes CSS nahoře)
     search = st.text_input("🔍 Hledat (ID, název, interpret):", "").lower()
     
-    filtered = [p for p in data if search in str(p['id']) or search in p['naz
+    # Filtrace dat
+    filtered = [p for p in data if (search in str(p['id']) or 
+                                    search in p['nazev'].lower() or 
+                                    search in p['interpreti']['jmeno'].lower())]
+    
+    if filtered:
+        st.write("") 
+        for p in filtered:
+            btn_label = f"{p['nazev']} — {p['interpreti']['jmeno']}"
+            if st.button(btn_label, key=f"p-{p['id']}", use_container_width=True):
+                st.session_state.selected_song_id = p['id']
+                st.rerun()
+    else:
+        st.warning("Nic nenalezeno.")
