@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 # 1. Konfigurace stránky - "wide" rozložení je nutností pro desktopový vzhled
 st.set_page_config(page_title="Zpěvník", layout="wide", initial_sidebar_state="collapsed")
 
-# Odstranění parametrů z URL
+# Odstranění FBCLID a jiných parametrů z adresy hned při startu
 if st.query_params:
     st.query_params.clear()
 
@@ -105,7 +105,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Načtení dat (stejné jako předtím)
+# 3. Načtení dat
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 
@@ -128,7 +128,7 @@ if 'vybrany_interpret' not in st.session_state:
 if 'hledani' not in st.session_state:
     st.session_state.hledani = ""
 
-# --- HLAVNÍ LOGIKA ZOBRAZENÍ ---
+# --- HLAVNÍ LOGIKA ---
 
 if st.session_state.selected_song_id:
     # --- ZOBRAZENÍ DETAILU PÍSNĚ (VIEWER) ---
@@ -160,21 +160,32 @@ if st.session_state.selected_song_id:
             white-space: pre; 
             line-height: 1.5;
             touch-action: pan-y; 
+            user-select: none;
+            -webkit-user-select: none;
         ">{finalni_text}</div>
+
         <script>
-            // JS pro zoomování (stejný jako váš původní)
+            // JS pro zoomování
             const el = document.getElementById('zoom-container');
             let fontSize = 18;
             let initialDist = -1;
+
             el.addEventListener('touchstart', (e) => {{
                 if (e.touches.length === 2) {{
-                    initialDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+                    initialDist = Math.hypot(
+                        e.touches[0].pageX - e.touches[1].pageX,
+                        e.touches[0].pageY - e.touches[1].pageY
+                    );
                 }}
             }}, {{passive: false}});
+
             el.addEventListener('touchmove', (e) => {{
                 if (e.touches.length === 2 && initialDist > 0) {{
-                    e.preventDefault(); 
-                    const currentDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+                    e.preventDefault(); // Zablokuje scroll jen při zoomování
+                    const currentDist = Math.hypot(
+                        e.touches[0].pageX - e.touches[1].pageX,
+                        e.touches[0].pageY - e.touches[1].pageY
+                    );
                     const diff = currentDist - initialDist;
                     if (Math.abs(diff) > 5) {{
                         fontSize += diff > 0 ? 0.8 : -0.8;
@@ -184,12 +195,14 @@ if st.session_state.selected_song_id:
                     }}
                 }}
             }}, {{passive: false}});
+
             el.addEventListener('touchend', (e) => {{
                 if (e.touches.length < 2) {{ initialDist = -1; }}
             }});
         </script>
         """
         
+        # Výpočet výšky okna
         vyska = (len(finalni_text.split('\n')) * 30) + 100
         components.html(html_content, height=vyska, scrolling=False)
     else:
@@ -197,7 +210,7 @@ if st.session_state.selected_song_id:
         st.rerun()
 
 else:
-    # --- ZOBRAZENÍ SEZNAMU (ZPEVNIK.PYW) ---
+    # --- ZOBRAZENÍ SEZNAMU (HLAVNÍ MENU) ---
     
     # Rozdělení na levý panel (interpreti) a pravý panel (seznam) - napodobuje Tkinter Frames
     col_left, col_right = st.columns([1, 4])
@@ -215,14 +228,14 @@ else:
         )
         
     with col_right:
-        # Horní vyhledávací lišta (napodobuje layout z obrázku)
+        # Horní vyhledávací lišta (napodobuje layout z desktopu)
         s_col1, s_col2 = st.columns(2)
         with s_col1:
             hledani = st.text_input("Hledání (interpret, název, číslo)...", key="hledani_input", label_visibility="collapsed", placeholder="Hledání (interpret, název, číslo)...").lower()
         with s_col2:
             fulltext = st.text_input("Fulltext", key="fulltext_input", label_visibility="collapsed", placeholder="Fulltext (hledat v textech)...").lower()
 
-        # Lišta tlačítek (Filtry) - napodobení barevných štítků z obrázku
+        # Lišta tlačítek (Filtry) - napodobení barevných štítků
         st.markdown("""
             <div class="filter-btn-group" style="margin-bottom: 10px;">
                 <button style="background: white; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">VŠECHNY</button>
@@ -237,22 +250,31 @@ else:
         # Filtrování dat
         filtered = data
         
-        # Filtr interpret
+        # 1. Filtr interpret
         if st.session_state.vybrany_interpret != "--- Vše ---":
             filtered = [p for p in filtered if p['interpreti']['jmeno'] == st.session_state.vybrany_interpret]
             
-        # Filtr vyhledávání
+        # 2. Běžné vyhledávání (ID, název, interpret)
         if hledani:
             filtered = [p for p in filtered if (hledani in str(p['id']) or 
                                                 hledani in p['nazev'].lower() or 
                                                 hledani in p['interpreti']['jmeno'].lower())]
+        
+        # 3. FULLTEXTOVÉ vyhledávání (hledání uvnitř textů písní)
+        if fulltext:
+            slova = fulltext.split() # Rozdělí dotaz na jednotlivá slova
+            filtered = [
+                p for p in filtered 
+                # Zkontroluje, zda píseň vůbec má text a zda VŠECHNA slova z vyhledávání jsou v textu obsažena
+                if p.get('text_akordy') and all(slovo in p['text_akordy'].lower() for slovo in slova)
+            ]
         
         # Zobrazení výsledků (simulace Listboxu vpravo)
         if filtered:
             # Abychom simulovali čistý seznam, použijeme kontejner
             with st.container():
                 for p in filtered:
-                    # Prefixy jako v desktopu (? pro nehotové, ! pro hotové - zde natvrdo jako ukázka)
+                    # Prefixy - prozatím statické zástupné znaky pro demonstraci jako v desktopu
                     prefix = "? " 
                     titulek = f"{prefix}{p['nazev']} - {p['interpreti']['jmeno']}"
                     
