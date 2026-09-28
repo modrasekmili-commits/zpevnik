@@ -66,16 +66,6 @@ st.markdown("""
         padding: 5px 10px;
     }
 
-    /* Horní lišta filtru (barevná tlačítka z obrázku) */
-    .filter-btn-group .stButton button {
-        width: auto !important;
-        display: inline-block;
-        border: 1px solid #444 !important;
-        padding: 2px 8px !important;
-        font-size: 12px;
-        margin-right: -5px;
-    }
-
     /* Detail písně - hlavička */
     .viewer-header {
         background-color: #333333;
@@ -142,7 +132,7 @@ if st.session_state.selected_song_id:
                 st.session_state.selected_song_id = None
                 st.rerun()
         with col_title:
-            st.markdown(f'<div class="viewer-title">{pisen["interpreti"]["jmeno"]} - {pisen["nazev"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="viewer-title">{pisen["id"]}. {pisen["interpreti"]["jmeno"]} - {pisen["nazev"]}</div>', unsafe_allow_html=True)
         with col_trans:
             trans = st.number_input("Transpozice:", value=0, step=1, key="trans", label_visibility="collapsed")
 
@@ -235,18 +225,6 @@ else:
         with s_col2:
             fulltext = st.text_input("Fulltext", key="fulltext_input", label_visibility="collapsed", placeholder="Fulltext (hledat v textech)...").lower()
 
-        # Lišta tlačítek (Filtry) - napodobení barevných štítků
-        st.markdown("""
-            <div class="filter-btn-group" style="margin-bottom: 10px;">
-                <button style="background: white; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">VŠECHNY</button>
-                <button style="background: #e8d0e8; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">🕒 HISTORIE</button>
-                <button style="background: #cce5ff; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">📊 TOP PŘEHRANÉ</button>
-                <button style="background: #ffcc99; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">? (Nehotové)</button>
-                <button style="background: #c3e6cb; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">! (Hotové)</button>
-                <button style="background: #f5c6cb; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">♥ (Oblíbené)</button>
-            </div>
-        """, unsafe_allow_html=True)
-
         # Filtrování dat
         filtered = data
         
@@ -274,9 +252,7 @@ else:
             # Abychom simulovali čistý seznam, použijeme kontejner
             with st.container():
                 for p in filtered:
-                    # Prefixy - prozatím statické zástupné znaky pro demonstraci jako v desktopu
-                    prefix = "? " 
-                    titulek = f"{prefix}{p['nazev']} - {p['interpreti']['jmeno']}"
+                    titulek = f"{p['nazev']} - {p['interpreti']['jmeno']}"
                     
                     if st.button(titulek, key=f"p-{p['id']}"):
                         st.session_state.selected_song_id = p['id']
