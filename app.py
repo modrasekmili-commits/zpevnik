@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 # 1. Konfigurace stránky - "wide" rozložení je nutností pro desktopový vzhled
 st.set_page_config(page_title="Zpěvník", layout="wide", initial_sidebar_state="collapsed")
 
-# Odstranění FBCLID a jiných parametrů z adresy hned při startu
+# Odstranění parametrů z adresy hned při startu
 if st.query_params:
     st.query_params.clear()
 
@@ -64,16 +64,6 @@ st.markdown("""
         border: 1px solid #555;
         border-radius: 0px;
         padding: 5px 10px;
-    }
-
-    /* Horní lišta filtru (barevná tlačítka z obrázku) */
-    .filter-btn-group .stButton button {
-        width: auto !important;
-        display: inline-block;
-        border: 1px solid #444 !important;
-        padding: 2px 8px !important;
-        font-size: 12px;
-        margin-right: -5px;
     }
 
     /* Detail písně - hlavička */
@@ -142,35 +132,88 @@ if st.session_state.selected_song_id:
                 st.session_state.selected_song_id = None
                 st.rerun()
         with col_title:
-            st.markdown(f'<div class="viewer-title">{pisen["interpreti"]["jmeno"]} - {pisen["nazev"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="viewer-title">{pisen["id"]}. {pisen["interpreti"]["jmeno"]} - {pisen["nazev"]}</div>', unsafe_allow_html=True)
         with col_trans:
             trans = st.number_input("Transpozice:", value=0, step=1, key="trans", label_visibility="collapsed")
 
         clean_text = pisen['text_akordy'].replace('\r\n', '\n').replace('\r', '\n').replace('\xa0', ' ').expandtabs(4)
         finalni_text = logic.transponuj_text(clean_text, trans)
 
-        # HTML kontejner pro text s Consolas fontem (jako v desktopu)
+        # HTML kontejner pro text s Consolas fontem a novým plovoucím panelem
         html_content = f"""
-        <div id="zoom-container" style="
-            background-color: #1e1e1e; 
-            color: #ffffff; 
-            padding: 20px; 
-            font-family: 'Consolas', 'Roboto Mono', monospace; 
-            font-size: 18px; 
-            white-space: pre; 
-            line-height: 1.5;
-            touch-action: pan-y; 
-            user-select: none;
-            -webkit-user-select: none;
-        ">{finalni_text}</div>
+        <style>
+            body, html {{
+                margin: 0; padding: 0; height: 100%; overflow: hidden; background-color: #1e1e1e;
+            }}
+            #zoom-container {{
+                height: 100vh;
+                overflow-y: auto;
+                padding: 20px;
+                padding-bottom: 120px; /* Místo pro plovoucí panel dole */
+                background-color: #1e1e1e; 
+                color: #ffffff; 
+                font-family: 'Consolas', 'Roboto Mono', monospace; 
+                font-size: 18px; 
+                white-space: pre; 
+                line-height: 1.5;
+                touch-action: pan-y; 
+                user-select: none;
+                -webkit-user-select: none;
+            }}
+            
+            /* Plovoucí panel s tlačítky */
+            #controls {{
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(40, 40, 40, 0.95);
+                padding: 10px;
+                border: 1px solid #555;
+                border-radius: 10px;
+                display: flex;
+                gap: 10px;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+                z-index: 1000;
+            }}
+            .ctrl-btn {{
+                background: #444; 
+                color: white; 
+                border: 1px solid #666; 
+                padding: 10px 20px; 
+                cursor: pointer; 
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                font-weight: bold; 
+                border-radius: 5px; 
+                transition: 0.2s;
+            }}
+            .ctrl-btn:active {{ background: #666; }}
+            
+            /* Třída pro aktivní stav přehrávání - napodobuje oranžový stav z desktopu */
+            #btnScroll.playing {{
+                background: #ffc107; 
+                color: black;
+                border-color: #d39e00;
+            }}
+        </style>
+
+        <div id="zoom-container">{finalni_text}</div>
+        
+        <div id="controls">
+            <button class="ctrl-btn" id="btnSlower">🐢 Zpomalit</button>
+            <button class="ctrl-btn" id="btnScroll">▶ PLAY</button>
+            <button class="ctrl-btn" id="btnFaster">🐇 Zrychlit</button>
+        </div>
 
         <script>
-            // JS pro zoomování
-            const el = document.getElementById('zoom-container');
+            const container = document.getElementById('zoom-container');
+            
+            // --- ZOOMOVÁNÍ ---
             let fontSize = 18;
             let initialDist = -1;
 
-            el.addEventListener('touchstart', (e) => {{
+            container.addEventListener('touchstart', (e) => {{
                 if (e.touches.length === 2) {{
                     initialDist = Math.hypot(
                         e.touches[0].pageX - e.touches[1].pageX,
@@ -179,9 +222,9 @@ if st.session_state.selected_song_id:
                 }}
             }}, {{passive: false}});
 
-            el.addEventListener('touchmove', (e) => {{
+            container.addEventListener('touchmove', (e) => {{
                 if (e.touches.length === 2 && initialDist > 0) {{
-                    e.preventDefault(); // Zablokuje scroll jen při zoomování
+                    e.preventDefault(); 
                     const currentDist = Math.hypot(
                         e.touches[0].pageX - e.touches[1].pageX,
                         e.touches[0].pageY - e.touches[1].pageY
@@ -190,21 +233,74 @@ if st.session_state.selected_song_id:
                     if (Math.abs(diff) > 5) {{
                         fontSize += diff > 0 ? 0.8 : -0.8;
                         fontSize = Math.min(Math.max(12, fontSize), 100); 
-                        el.style.fontSize = fontSize + 'px';
+                        container.style.fontSize = fontSize + 'px';
                         initialDist = currentDist;
                     }}
                 }}
             }}, {{passive: false}});
 
-            el.addEventListener('touchend', (e) => {{
+            container.addEventListener('touchend', (e) => {{
                 if (e.touches.length < 2) {{ initialDist = -1; }}
+            }});
+
+            // --- AUTOMATICKÉ ROLOVÁNÍ ---
+            let isScrolling = false;
+            let scrollInterval;
+            let speed = 40; // Rychlost (čím menší číslo, tím rychleji)
+
+            const btnScroll = document.getElementById('btnScroll');
+            const btnSlower = document.getElementById('btnSlower');
+            const btnFaster = document.getElementById('btnFaster');
+
+            function toggleScroll() {{
+                isScrolling = !isScrolling;
+                if (isScrolling) {{
+                    btnScroll.innerText = '⏸ STOP';
+                    btnScroll.classList.add('playing');
+                    startScrolling();
+                }} else {{
+                    btnScroll.innerText = '▶ PLAY';
+                    btnScroll.classList.remove('playing');
+                    stopScrolling();
+                }}
+            }}
+
+            function startScrolling() {{
+                clearInterval(scrollInterval);
+                scrollInterval = setInterval(() => {{
+                    container.scrollBy(0, 1);
+                }}, speed);
+            }}
+
+            function stopScrolling() {{
+                clearInterval(scrollInterval);
+            }}
+
+            // Obsluha tlačítek
+            btnScroll.addEventListener('click', toggleScroll);
+            
+            btnSlower.addEventListener('click', () => {{
+                speed = Math.min(speed + 15, 150);
+                if (isScrolling) startScrolling();
+            }});
+
+            btnFaster.addEventListener('click', () => {{
+                speed = Math.max(speed - 15, 10);
+                if (isScrolling) startScrolling();
+            }});
+
+            // Mezerník spouští rolování (stejně jako v desktopové aplikaci)
+            document.addEventListener('keydown', (e) => {{
+                if (e.code === 'Space') {{
+                    e.preventDefault(); // Zabrání výchozímu poskoku stránky
+                    toggleScroll();
+                }}
             }});
         </script>
         """
         
-        # Výpočet výšky okna
-        vyska = (len(finalni_text.split('\n')) * 30) + 100
-        components.html(html_content, height=vyska, scrolling=False)
+        # Pevná výška okna (750px), aby vnitřní skript mohl rolovat obsahem uvnitř něj
+        components.html(html_content, height=750, scrolling=False)
     else:
         st.session_state.selected_song_id = None
         st.rerun()
@@ -228,24 +324,12 @@ else:
         )
         
     with col_right:
-        # Horní vyhledávací lišta (napodobuje layout z desktopu)
+        # Horní vyhledávací lišta
         s_col1, s_col2 = st.columns(2)
         with s_col1:
             hledani = st.text_input("Hledání (interpret, název, číslo)...", key="hledani_input", label_visibility="collapsed", placeholder="Hledání (interpret, název, číslo)...").lower()
         with s_col2:
             fulltext = st.text_input("Fulltext", key="fulltext_input", label_visibility="collapsed", placeholder="Fulltext (hledat v textech)...").lower()
-
-        # Lišta tlačítek (Filtry) - napodobení barevných štítků
-        st.markdown("""
-            <div class="filter-btn-group" style="margin-bottom: 10px;">
-                <button style="background: white; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">VŠECHNY</button>
-                <button style="background: #e8d0e8; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">🕒 HISTORIE</button>
-                <button style="background: #cce5ff; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">📊 TOP PŘEHRANÉ</button>
-                <button style="background: #ffcc99; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">? (Nehotové)</button>
-                <button style="background: #c3e6cb; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">! (Hotové)</button>
-                <button style="background: #f5c6cb; color: black; border: 1px solid #ccc; padding: 2px 5px; font-size: 11px;">♥ (Oblíbené)</button>
-            </div>
-        """, unsafe_allow_html=True)
 
         # Filtrování dat
         filtered = data
@@ -260,23 +344,19 @@ else:
                                                 hledani in p['nazev'].lower() or 
                                                 hledani in p['interpreti']['jmeno'].lower())]
         
-        # 3. FULLTEXTOVÉ vyhledávání (hledání uvnitř textů písní)
+        # 3. FULLTEXTOVÉ vyhledávání
         if fulltext:
-            slova = fulltext.split() # Rozdělí dotaz na jednotlivá slova
+            slova = fulltext.split() 
             filtered = [
                 p for p in filtered 
-                # Zkontroluje, zda píseň vůbec má text a zda VŠECHNA slova z vyhledávání jsou v textu obsažena
                 if p.get('text_akordy') and all(slovo in p['text_akordy'].lower() for slovo in slova)
             ]
         
-        # Zobrazení výsledků (simulace Listboxu vpravo)
+        # Zobrazení výsledků (čistý titulek bez příznaků ! a ?)
         if filtered:
-            # Abychom simulovali čistý seznam, použijeme kontejner
             with st.container():
                 for p in filtered:
-                    # Prefixy - prozatím statické zástupné znaky pro demonstraci jako v desktopu
-                    prefix = "? " 
-                    titulek = f"{prefix}{p['nazev']} - {p['interpreti']['jmeno']}"
+                    titulek = f"{p['nazev']} - {p['interpreti']['jmeno']}"
                     
                     if st.button(titulek, key=f"p-{p['id']}"):
                         st.session_state.selected_song_id = p['id']
