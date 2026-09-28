@@ -95,7 +95,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Načtení dat
+# 3. Načtení dat (Přidán výběr sloupce 'rychlost')
 URL = st.secrets["SUPABASE_URL"]
 KEY = st.secrets["SUPABASE_KEY"]
 
@@ -103,7 +103,7 @@ KEY = st.secrets["SUPABASE_KEY"]
 def nacti_data():
     headers = {"apikey": KEY, "Authorization": f"Bearer {KEY}", "Accept-Profile": "zpevnik"}
     try:
-        r = requests.get(f"{URL}/rest/v1/pisne?select=id,nazev,text_akordy,interpreti(jmeno)&order=nazev", headers=headers)
+        r = requests.get(f"{URL}/rest/v1/pisne?select=id,nazev,text_akordy,rychlost,interpreti(jmeno)&order=nazev", headers=headers)
         if r.status_code == 200: return r.json()
     except: pass
     return []
@@ -125,7 +125,15 @@ if st.session_state.selected_song_id:
     pisen = next((p for p in data if p['id'] == st.session_state.selected_song_id), None)
     
     if pisen:
-        # Simulace horní lišty z viewer.py
+        # Získání rychlosti z DB a přepočet do milisekund pro JS
+        db_rychlost = pisen.get('rychlost')
+        try:
+            # Hodnota 3000 v desktopu odpovídá rozumné rychlosti. Přepočet do milisekund pro JS.
+            js_speed = max(10, int(int(db_rychlost) / 75)) if db_rychlost else 40
+        except:
+            js_speed = 40
+
+        # Simulace horní lišty
         col_back, col_title, col_trans = st.columns([1, 8, 3])
         with col_back:
             if st.button("⬅ Zpět"):
@@ -139,7 +147,7 @@ if st.session_state.selected_song_id:
         clean_text = pisen['text_akordy'].replace('\r\n', '\n').replace('\r', '\n').replace('\xa0', ' ').expandtabs(4)
         finalni_text = logic.transponuj_text(clean_text, trans)
 
-        # HTML kontejner pro text s Consolas fontem a novým plovoucím panelem
+        # HTML kontejner pro text s plovoucím panelem a JavaScriptem
         html_content = f"""
         <style>
             body, html {{
@@ -149,7 +157,7 @@ if st.session_state.selected_song_id:
                 height: 100vh;
                 overflow-y: auto;
                 padding: 20px;
-                padding-bottom: 120px; /* Místo pro plovoucí panel dole */
+                padding-bottom: 120px;
                 background-color: #1e1e1e; 
                 color: #ffffff; 
                 font-family: 'Consolas', 'Roboto Mono', monospace; 
@@ -190,7 +198,7 @@ if st.session_state.selected_song_id:
             }}
             .ctrl-btn:active {{ background: #666; }}
             
-            /* Třída pro aktivní stav přehrávání - napodobuje oranžový stav z desktopu */
+            /* Třída pro aktivní stav přehrávání */
             #btnScroll.playing {{
                 background: #ffc107; 
                 color: black;
@@ -201,9 +209,9 @@ if st.session_state.selected_song_id:
         <div id="zoom-container">{finalni_text}</div>
         
         <div id="controls">
-            <button class="ctrl-btn" id="btnSlower">🐢 Zpomalit</button>
-            <button class="ctrl-btn" id="btnScroll">▶ PLAY</button>
-            <button class="ctrl-btn" id="btnFaster">🐇 Zrychlit</button>
+            <button class="ctrl-btn" id="btnSlower">🐢 Zpomalit (Up)</button>
+            <button class="ctrl-btn" id="btnScroll">▶ PLAY (Space)</button>
+            <button class="ctrl-btn" id="btnFaster">🐇 Zrychlit (Down)</button>
         </div>
 
         <script>
@@ -246,7 +254,9 @@ if st.session_state.selected_song_id:
             // --- AUTOMATICKÉ ROLOVÁNÍ ---
             let isScrolling = false;
             let scrollInterval;
-            let speed = 40; // Rychlost (čím menší číslo, tím rychleji)
+            
+            // Načtení výchozí rychlosti z databáze (předáno z Pythonu)
+            let speed = {js_speed}; 
 
             const btnScroll = document.getElementById('btnScroll');
             const btnSlower = document.getElementById('btnSlower');
@@ -255,11 +265,11 @@ if st.session_state.selected_song_id:
             function toggleScroll() {{
                 isScrolling = !isScrolling;
                 if (isScrolling) {{
-                    btnScroll.innerText = '⏸ STOP';
+                    btnScroll.innerText = '⏸ STOP (Space)';
                     btnScroll.classList.add('playing');
                     startScrolling();
                 }} else {{
-                    btnScroll.innerText = '▶ PLAY';
+                    btnScroll.innerText = '▶ PLAY (Space)';
                     btnScroll.classList.remove('playing');
                     stopScrolling();
                 }}
@@ -276,24 +286,37 @@ if st.session_state.selected_song_id:
                 clearInterval(scrollInterval);
             }}
 
-            // Obsluha tlačítek
+            // Obsluha tlačítek myší
             btnScroll.addEventListener('click', toggleScroll);
             
             btnSlower.addEventListener('click', () => {{
-                speed = Math.min(speed + 15, 150);
+                speed = Math.min(speed + 15, 150); // Zvýšení intervalu = zpomalení
                 if (isScrolling) startScrolling();
             }});
 
             btnFaster.addEventListener('click', () => {{
-                speed = Math.max(speed - 15, 10);
+                speed = Math.max(speed - 15, 10); // Snížení intervalu = zrychlení
                 if (isScrolling) startScrolling();
             }});
 
-            // Mezerník spouští rolování (stejně jako v desktopové aplikaci)
+            // Obsluha klávesnice (Mezerník, Šipka nahoru, Šipka dolů)
             document.addEventListener('keydown', (e) => {{
                 if (e.code === 'Space') {{
-                    e.preventDefault(); // Zabrání výchozímu poskoku stránky
+                    e.preventDefault(); 
                     toggleScroll();
+                }} else if (e.code === 'ArrowDown') {{
+                    e.preventDefault();
+                    if (!isScrolling) {{
+                        toggleScroll(); // Šipka dolů zapne posun
+                    }} else {{
+                        speed = Math.max(speed - 15, 10); // Pokud už jede, zrychlí ho (jako v desktopu)
+                        startScrolling();
+                    }}
+                }} else if (e.code === 'ArrowUp') {{
+                    e.preventDefault();
+                    if (isScrolling) {{
+                        toggleScroll(); // Šipka nahoru zastaví posun
+                    }}
                 }}
             }});
         </script>
@@ -352,7 +375,7 @@ else:
                 if p.get('text_akordy') and all(slovo in p['text_akordy'].lower() for slovo in slova)
             ]
         
-        # Zobrazení výsledků (čistý titulek bez příznaků ! a ?)
+        # Zobrazení výsledků
         if filtered:
             with st.container():
                 for p in filtered:
